@@ -1,0 +1,595 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Inventory">
+<meta name="theme-color" content="#1F3B4D">
+<title>EverForged Inventory</title>
+<style>
+  :root {
+    --ink: #1c2730; --muted: #66727c; --line: #e2e6ea; --bg: #f4f6f8; --card: #fff;
+    --brand: #1F3B4D; --brand-2: #2d556e; --ok: #1f7a4d; --ok-bg: #e7f5ee;
+    --low: #a3222d; --low-bg: #fbe9eb; --warn-bg: #fff6dd;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--ink);
+    font: 16px/1.35 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; }
+  button { font: inherit; cursor: pointer; }
+  input, select, textarea { font: inherit; color: inherit; }
+  .hidden { display: none !important; }
+
+  header { position: sticky; top: 0; z-index: 20; background: var(--brand); color: #fff;
+    padding: 12px 14px 0; box-shadow: 0 2px 8px rgba(0,0,0,.15); }
+  .top { display: flex; align-items: center; gap: 10px; }
+  .top h1 { font-size: 18px; margin: 0; flex: 1; letter-spacing: .2px; }
+  .who { background: rgba(255,255,255,.14); border: 0; color: #fff; border-radius: 999px;
+    padding: 6px 12px; font-size: 14px; max-width: 45vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .search { margin: 10px 0 0; position: relative; }
+  .search input { width: 100%; border: 0; border-radius: 10px; padding: 11px 38px 11px 38px; font-size: 16px; }
+  .search svg { position: absolute; left: 11px; top: 50%; transform: translateY(-50%); }
+  .search .clear { position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+    border: 0; background: none; font-size: 22px; color: #888; padding: 4px 8px; }
+  .tabs { display: flex; gap: 6px; overflow-x: auto; padding: 10px 0 10px; scrollbar-width: none; }
+  .tabs::-webkit-scrollbar { display: none; }
+  .tab { flex: none; border: 0; border-radius: 999px; padding: 8px 14px; font-size: 15px;
+    background: rgba(255,255,255,.12); color: #fff; white-space: nowrap; }
+  .tab.on { background: #fff; color: var(--brand); font-weight: 600; }
+  .tab .n { opacity: .7; font-size: 12px; margin-left: 4px; }
+
+  .bar { display: flex; gap: 6px; align-items: center; padding: 10px 14px 4px; flex-wrap: wrap; }
+  .chip { border: 1px solid var(--line); background: #fff; border-radius: 999px; padding: 6px 12px; font-size: 14px; color: var(--ink); }
+  .chip.on { background: var(--brand); color: #fff; border-color: var(--brand); }
+  .bar .sp { flex: 1; }
+  .add { border: 1px dashed var(--brand-2); color: var(--brand); background: #fff; border-radius: 999px; padding: 6px 12px; font-size: 14px; font-weight: 600; }
+  .progress { padding: 2px 14px 6px; font-size: 13px; color: var(--muted); }
+  .pbar { height: 4px; background: var(--line); border-radius: 4px; overflow: hidden; margin-top: 4px; }
+  .pbar i { display: block; height: 100%; background: var(--ok); width: 0; transition: width .2s; }
+
+  main { padding: 4px 10px 120px; max-width: 760px; margin: 0 auto; }
+  .group { margin: 14px 4px 6px; font-size: 13px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .6px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-left: 4px solid transparent;
+    border-radius: 12px; padding: 11px 12px; margin: 8px 0; transition: box-shadow .3s; }
+  .card.entered { border-left-color: var(--ok); background: #fbfefc; }
+  .card.low { border-left-color: var(--low); }
+  .card.entered.low { border-left-color: var(--ok); }
+  .card.flash { box-shadow: 0 0 0 3px #f1c45a; }
+  .r1 { display: flex; align-items: flex-start; gap: 6px; }
+  .nm { flex: 1; font-weight: 600; font-size: 16px; }
+  .ico { border: 0; background: none; padding: 4px 6px; color: var(--muted); border-radius: 8px; }
+  .ico:active { background: var(--bg); }
+  .meta { font-size: 13px; color: var(--muted); margin-top: 1px; }
+  .pill { display: inline-block; font-size: 11px; font-weight: 700; border-radius: 999px; padding: 1px 7px; vertical-align: 2px; margin-left: 4px; }
+  .pill.low { background: var(--low-bg); color: var(--low); }
+  .pill.exp { background: var(--warn-bg); color: #7a5a00; }
+  .r2 { display: flex; align-items: center; gap: 10px; margin-top: 9px; }
+  .last { flex: 1; font-size: 14px; color: var(--muted); min-width: 0; }
+  .last b { color: var(--ink); font-size: 18px; }
+  .last small { display: block; font-size: 12px; }
+  .entry { display: flex; align-items: center; gap: 6px; }
+  .same { border: 1px solid var(--line); background: #fff; color: var(--brand); border-radius: 10px; padding: 10px 10px; font-size: 13px; font-weight: 600; }
+  .cnt { width: 104px; border: 1.5px solid #c9d0d6; border-radius: 10px; padding: 10px; font-size: 18px; text-align: center; background: #fff; }
+  .cnt:focus { outline: none; border-color: var(--brand-2); box-shadow: 0 0 0 3px rgba(45,85,110,.18); }
+  .cnt.bad { border-color: var(--low); background: var(--low-bg); }
+  .diff { font-size: 12px; font-weight: 700; min-width: 34px; text-align: right; }
+  .diff.up { color: var(--ok); } .diff.down { color: var(--low); }
+  .lotrow { display: flex; gap: 8px; margin-top: 8px; }
+  .lotrow label { flex: 1; font-size: 12px; color: var(--muted); }
+  .lotrow input { display: block; width: 100%; margin-top: 2px; border: 1px solid #c9d0d6; border-radius: 8px; padding: 8px; font-size: 15px; background: #fff; }
+  .empty { text-align: center; color: var(--muted); padding: 40px 10px; }
+
+  footer { position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; background: #fff; border-top: 1px solid var(--line);
+    padding: 10px 14px calc(10px + env(safe-area-inset-bottom)); display: flex; align-items: center; gap: 10px;
+    box-shadow: 0 -4px 14px rgba(0,0,0,.06); }
+  footer .info { flex: 1; font-size: 14px; color: var(--muted); }
+  footer .info b { color: var(--ink); }
+  .btn { border: 0; border-radius: 10px; padding: 12px 18px; font-weight: 700; font-size: 16px; }
+  .btn.primary { background: var(--brand); color: #fff; }
+  .btn.primary:disabled { background: #b8c2ca; }
+  .btn.ghost { background: var(--bg); color: var(--ink); }
+  .btn.danger { background: var(--low-bg); color: var(--low); }
+  .linkbtn { border: 0; background: none; color: var(--brand-2); text-decoration: underline; padding: 4px; font-size: 14px; }
+
+  .modal { position: fixed; inset: 0; z-index: 50; background: rgba(16,24,32,.45); display: flex; align-items: flex-end; justify-content: center; }
+  .sheet { background: #fff; width: 100%; max-width: 560px; max-height: 88vh; overflow: auto; border-radius: 16px 16px 0 0;
+    padding: 18px 16px calc(18px + env(safe-area-inset-bottom)); }
+  @media (min-width: 700px) { .modal { align-items: center; } .sheet { border-radius: 16px; } }
+  .sheet h2 { margin: 0 0 4px; font-size: 19px; }
+  .sheet p.sub { margin: 0 0 14px; color: var(--muted); font-size: 14px; }
+  .f { display: block; margin: 0 0 12px; font-size: 13px; color: var(--muted); font-weight: 600; }
+  .f input, .f select, .f textarea { display: block; width: 100%; margin-top: 4px; border: 1.5px solid #c9d0d6; border-radius: 10px; padding: 10px; font-size: 16px; font-weight: 400; background: #fff; }
+  .f2 { display: flex; gap: 10px; } .f2 .f { flex: 1; }
+  .acts { display: flex; gap: 8px; margin-top: 6px; } .acts .sp { flex: 1; }
+  .err { color: var(--low); font-size: 14px; min-height: 18px; margin: 4px 0; }
+  .hist { list-style: none; padding: 0; margin: 0; }
+  .hist li { border-bottom: 1px solid var(--line); padding: 9px 0; font-size: 14px; }
+  .hist li b { font-size: 16px; }
+  .hist .w { color: var(--muted); font-size: 12px; }
+
+  .toast { position: fixed; left: 50%; bottom: 86px; transform: translateX(-50%); z-index: 60; background: #1c2730; color: #fff;
+    padding: 10px 16px; border-radius: 10px; font-size: 15px; max-width: 90vw; box-shadow: 0 6px 20px rgba(0,0,0,.25); }
+  .toast.err { background: var(--low); }
+  .loading { text-align: center; padding: 60px 10px; color: var(--muted); }
+  .spin { width: 28px; height: 28px; border: 3px solid var(--line); border-top-color: var(--brand); border-radius: 50%;
+    animation: sp 0.8s linear infinite; margin: 0 auto 10px; }
+  @keyframes sp { to { transform: rotate(360deg); } }
+
+  /* QR page */
+  .qrwrap { max-width: 900px; margin: 0 auto; padding: 16px; }
+  .qrgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 14px; }
+  .qrcard { background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 14px; text-align: center; break-inside: avoid; }
+  .qrcard .q { display: flex; justify-content: center; margin: 8px 0; }
+  .qrcard h3 { margin: 0; font-size: 17px; }
+  .qrcard small { color: var(--muted); font-size: 11px; word-break: break-all; }
+  .qrgrid.items { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+  .qrgrid.items h3 { font-size: 13px; }
+  @media print {
+    .noprint { display: none !important; }
+    body { background: #fff; }
+    .qrcard { border: 1px solid #999; }
+  }
+</style>
+</head>
+<body>
+
+<div id="app"><div class="loading"><div class="spin"></div>Loading inventory…</div></div>
+
+<!-- Name -->
+<div id="mName" class="modal hidden"><div class="sheet">
+  <h2>Who's counting?</h2>
+  <p class="sub">Your name goes next to every count you save. This phone will remember it.</p>
+  <label class="f">Your name<input id="nameIn" autocomplete="name" placeholder="First and last name"></label>
+  <div class="err" id="nameErr"></div>
+  <div class="acts"><span class="sp"></span><button class="btn primary" id="nameOk">Continue</button></div>
+</div></div>
+
+<!-- Item add/edit -->
+<div id="mItem" class="modal hidden"><div class="sheet">
+  <h2 id="itTitle">Add item</h2>
+  <p class="sub" id="itSub"></p>
+  <label class="f">Item name<input id="itName" placeholder="e.g. Box 12x12x6"></label>
+  <div class="f2">
+    <label class="f">Area<select id="itArea"></select></label>
+    <label class="f">Unit<input id="itUnit" placeholder="each, rolls, cases of 12…"></label>
+  </div>
+  <div class="f2">
+    <label class="f">Location<input id="itLoc" placeholder="e.g. Shelf B3"></label>
+    <label class="f">Low-stock min<input id="itMin" type="number" inputmode="decimal" step="any" min="0" placeholder="Optional"></label>
+  </div>
+  <div class="f2">
+    <label class="f">Barcode / SKU<input id="itBc" placeholder="Optional"></label>
+    <label class="f" id="itCountWrap">Starting count<input id="itCount" type="number" inputmode="decimal" step="any" min="0" placeholder="Optional"></label>
+  </div>
+  <label class="f">Notes<textarea id="itNotes" rows="2" placeholder="Optional"></textarea></label>
+  <div class="err" id="itErr"></div>
+  <div class="acts">
+    <button class="btn danger hidden" id="itDel">Delete</button>
+    <span class="sp"></span>
+    <button class="btn ghost" data-close="mItem">Cancel</button>
+    <button class="btn primary" id="itSave">Save item</button>
+  </div>
+</div></div>
+
+<!-- History -->
+<div id="mHist" class="modal hidden"><div class="sheet">
+  <h2 id="hTitle">History</h2>
+  <p class="sub" id="hSub"></p>
+  <ul class="hist" id="hList"></ul>
+  <div class="acts"><span class="sp"></span><button class="btn ghost" data-close="mHist">Close</button></div>
+</div></div>
+
+<!-- Confirm -->
+<div id="mConfirm" class="modal hidden"><div class="sheet">
+  <h2 id="cTitle"></h2>
+  <p class="sub" id="cText"></p>
+  <div class="acts"><span class="sp"></span><button class="btn ghost" data-close="mConfirm">Cancel</button><button class="btn danger" id="cOk">Delete</button></div>
+</div></div>
+
+<script>
+var API = 'https://script.google.com/macros/s/AKfycbz39-bGlzxb89N09EG6W7C1qrEY3Z2-soZbLOr8YruYPVQgdCtKjcNopDTLhgphXkKytg/exec';
+var BOOT = (function () { var q = new URLSearchParams(location.search); return { area: q.get('area') || '', item: q.get('item') || '', page: q.get('page') || '' }; })();
+var HOME = location.origin + location.pathname;
+var LS_NAME = 'efinv_name', LS_DRAFT = 'efinv_draft';
+var D = null;                 // data from the Sheet
+var S = { area: '', q: '', filter: 'all', pending: {}, name: '', canManage: true, saving: false };
+
+function store(k, v) { try { if (v === undefined) return localStorage.getItem(k); if (v === null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch (e) { return null; } }
+function $(id) { return document.getElementById(id); }
+function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+function num(v) { return v === '' || v == null ? '' : Number(v); }
+function fmt(n) { if (n === '' || n == null || isNaN(n)) return '—'; return Number(n).toLocaleString('en-US', { maximumFractionDigits: 3 }); }
+function run(fn) {
+  var args = [].slice.call(arguments, 1);
+  return fetch(API, { method: 'POST', body: JSON.stringify({ fn: fn, args: args }), redirect: 'follow', credentials: 'omit' })
+    .then(function (r) { if (!r.ok) throw new Error('The inventory server did not respond (' + r.status + ').'); return r.json(); })
+    .then(function (r) { if (!r.ok) throw new Error(r.error); return r.v; });
+}
+function toast(msg, isErr) { document.querySelectorAll('.toast').forEach(function (x) { x.remove(); }); var t = document.createElement('div'); t.className = 'toast' + (isErr ? ' err' : ''); t.textContent = msg; document.body.appendChild(t); setTimeout(function () { t.remove(); }, isErr ? 5000 : 2600); }
+function showM(id) { $(id).classList.remove('hidden'); }
+function hideM(id) { $(id).classList.add('hidden'); }
+document.addEventListener('click', function (e) { var c = e.target.closest('[data-close]'); if (c) hideM(c.getAttribute('data-close')); });
+
+var ICON = {
+  search: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#7a8590" stroke-width="2.4"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>',
+  hist: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l3 2"/></svg>',
+  edit: '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>'
+};
+
+/* ---------- Load ---------- */
+function load() {
+  return run('getData').then(function (d) {
+    D = d;
+    D.items.sort(function (a, b) { return a.name.localeCompare(b.name, 'en', { numeric: true, sensitivity: 'base' }); });
+    var ids = {}; D.items.forEach(function (i) { ids[i.id] = 1; });
+    Object.keys(S.pending).forEach(function (k) { if (!ids[k]) delete S.pending[k]; });
+  });
+}
+
+function start() {
+  S.name = store(LS_NAME) || '';
+  try { S.pending = JSON.parse(store(LS_DRAFT) || '{}') || {}; } catch (e) { S.pending = {}; }
+  load().then(function () {
+    if (BOOT.page === 'qr') return renderQR();
+    var a = BOOT.area && D.areas.filter(function (x) { return x.toLowerCase() === String(BOOT.area).toLowerCase(); })[0];
+    S.area = a || D.areas[0];
+    renderShell();
+    if (!S.name) askName(); else checkManage();
+    if (Object.keys(S.pending).length) toast('Restored ' + Object.keys(S.pending).length + ' unsaved count(s) from earlier.');
+    if (BOOT.item) jumpTo(BOOT.item);
+  }).catch(function (e) {
+    $('app').innerHTML = '<div class="empty">Could not load inventory.<br><small>' + esc(e && e.message || e) + '</small><br><br><button class="btn primary" onclick="location.reload()">Try again</button></div>';
+  });
+}
+
+/* ---------- Name ---------- */
+function askName() {
+  $('nameIn').value = S.name || '';
+  $('nameErr').textContent = '';
+  showM('mName');
+  setTimeout(function () { $('nameIn').focus(); }, 100);
+}
+$('nameOk').onclick = function () {
+  var v = $('nameIn').value.trim();
+  if (v.length < 2) { $('nameErr').textContent = 'Please type your name.'; return; }
+  S.name = v; store(LS_NAME, v); hideM('mName'); renderHeader(); checkManage();
+};
+$('nameIn').addEventListener('keydown', function (e) { if (e.key === 'Enter') $('nameOk').click(); });
+function checkManage() {
+  if (!D.managersSet) { S.canManage = true; return; }
+  run('canManage', S.name).then(function (ok) { S.canManage = !!ok; renderList(); });
+}
+
+/* ---------- Shell ---------- */
+function renderShell() {
+  $('app').innerHTML =
+    '<header><div class="top"><h1>EverForged Inventory</h1><button class="who" id="who"></button></div>' +
+    '<div class="search">' + ICON.search + '<input id="q" type="search" placeholder="Search items or scan a barcode" autocomplete="off" enterkeyhint="search"><button class="clear hidden" id="qx" aria-label="Clear">×</button></div>' +
+    '<div class="tabs" id="tabs"></div></header>' +
+    '<div class="bar"><button class="chip" data-f="all">All items</button><button class="chip" data-f="todo">Left to count</button><button class="chip" data-f="low">Low stock</button><span class="sp"></span><button class="add" id="addBtn">+ Add item</button></div>' +
+    '<div class="progress" id="prog"></div>' +
+    '<main id="list"></main>' +
+    '<footer><div class="info" id="finfo"></div><button class="btn ghost hidden" id="clearBtn">Clear</button><button class="btn primary" id="saveBtn" disabled>Save</button></footer>';
+  renderHeader();
+  $('who').onclick = askName;
+  var q = $('q');
+  q.addEventListener('input', function () { S.q = q.value.trim(); $('qx').classList.toggle('hidden', !S.q); renderTabs(); renderList(); });
+  q.addEventListener('keydown', function (e) {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    var v = q.value.trim(); if (!v) return;
+    var exact = D.items.filter(function (i) { return (i.barcode && i.barcode.toLowerCase() === v.toLowerCase()) || i.id.toLowerCase() === v.toLowerCase(); });
+    var hits = exact.length ? exact : matches();
+    if (hits.length === 1) { q.value = ''; S.q = ''; $('qx').classList.add('hidden'); jumpTo(hits[0].id); }
+    else if (!hits.length) toast('No item matches "' + v + '".', true);
+    else q.blur();
+  });
+  $('qx').onclick = function () { q.value = ''; S.q = ''; $('qx').classList.add('hidden'); renderTabs(); renderList(); q.focus(); };
+  document.querySelectorAll('.bar .chip').forEach(function (b) {
+    b.onclick = function () { S.filter = b.getAttribute('data-f'); renderList(); };
+  });
+  $('addBtn').onclick = function () { openItem(null); };
+  $('saveBtn').onclick = save;
+  $('clearBtn').onclick = confirmClear;
+  var list = $('list');
+  list.addEventListener('input', onEntry);
+  list.addEventListener('change', onEntry);
+  list.addEventListener('click', onCardClick);
+  list.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter' && e.target.classList.contains('cnt')) {
+      e.preventDefault();
+      var all = [].slice.call(list.querySelectorAll('.cnt'));
+      var nx = all[all.indexOf(e.target) + 1];
+      if (nx) { nx.focus(); nx.scrollIntoView({ block: 'center', behavior: 'smooth' }); } else e.target.blur();
+    }
+  });
+  renderTabs(); renderList();
+}
+
+function confirmClear() {
+  $('cTitle').textContent = 'Clear unsaved counts?';
+  $('cText').textContent = 'This removes the ' + Object.keys(S.pending).length + ' count(s) you typed but have not saved. Nothing in the Sheet changes.';
+  $('cOk').textContent = 'Clear';
+  $('cOk').onclick = function () { S.pending = {}; saveDraft(); hideM('mConfirm'); renderList(); };
+  showM('mConfirm');
+  return false;
+}
+
+function renderHeader() { var w = $('who'); if (w) w.textContent = S.name ? S.name : 'Set name'; }
+
+function renderTabs() {
+  var html = D.areas.map(function (a) {
+    var n = D.items.filter(function (i) { return i.area.toLowerCase() === a.toLowerCase(); }).length;
+    return '<button class="tab' + (!S.q && S.area === a ? ' on' : '') + '" data-a="' + esc(a) + '">' + esc(a) + '<span class="n">' + n + '</span></button>';
+  }).join('');
+  html += '<button class="tab' + (!S.q && S.area === '*' ? ' on' : '') + '" data-a="*">All areas</button>';
+  html += '<button class="tab" data-a="#qr">QR codes</button>';
+  $('tabs').innerHTML = html;
+  $('tabs').querySelectorAll('.tab').forEach(function (b) {
+    b.onclick = function () {
+      var a = b.getAttribute('data-a');
+      if (a === '#qr') { location.href = HOME + '?page=qr'; return; }
+      S.area = a; S.q = ''; $('q').value = ''; $('qx').classList.add('hidden');
+      renderTabs(); renderList(); window.scrollTo(0, 0);
+    };
+  });
+}
+
+/* ---------- List ---------- */
+function isLotArea(area) { return D.lotAreas.indexOf(String(area).toLowerCase()) >= 0; }
+function isLow(i) { return i.min !== '' && i.count !== '' && Number(i.count) <= Number(i.min); }
+function matches() {
+  var q = S.q.toLowerCase();
+  var words = q.split(/\s+/).filter(String);
+  return D.items.filter(function (i) {
+    var hay = (i.name + ' ' + i.area + ' ' + i.location + ' ' + i.barcode + ' ' + i.id + ' ' + i.notes).toLowerCase();
+    return words.every(function (w) { return hay.indexOf(w) >= 0; });
+  });
+}
+function visible() {
+  var base = S.q ? matches() : D.items.filter(function (i) { return S.area === '*' || i.area.toLowerCase() === S.area.toLowerCase(); });
+  return base;
+}
+function areaOrder(a) { var i = D.areas.map(function (x) { return x.toLowerCase(); }).indexOf(a.toLowerCase()); return i < 0 ? 99 : i; }
+
+function renderList() {
+  document.querySelectorAll('.bar .chip').forEach(function (b) { b.classList.toggle('on', b.getAttribute('data-f') === S.filter); });
+  $('addBtn').classList.toggle('hidden', !S.canManage);
+  var base = visible();
+  var shown = base.filter(function (i) {
+    if (S.filter === 'todo') return !S.pending[i.id];
+    if (S.filter === 'low') return isLow(i);
+    return true;
+  });
+  var grouped = S.q || S.area === '*';
+  if (grouped) shown.sort(function (a, b) { return areaOrder(a.area) - areaOrder(b.area) || a.name.localeCompare(b.name, 'en', { numeric: true, sensitivity: 'base' }); });
+
+  var html = '', lastArea = null;
+  shown.forEach(function (i) {
+    if (grouped && i.area !== lastArea) { html += '<div class="group">' + esc(i.area) + '</div>'; lastArea = i.area; }
+    html += card(i);
+  });
+  if (!shown.length) {
+    html = '<div class="empty">' + (S.q ? 'No items match “' + esc(S.q) + '”.' : S.filter === 'todo' ? 'Everything here has a count entered. Tap Save.' : S.filter === 'low' ? 'Nothing is low right now.' : 'No items here yet.') +
+      (S.canManage && !S.q && S.filter === 'all' ? '<br><br><button class="btn primary" onclick="openItem(null)">+ Add the first item</button>' : '') + '</div>';
+  }
+  $('list').innerHTML = html;
+
+  var done = base.filter(function (i) { return S.pending[i.id]; }).length;
+  var label = S.q ? 'Search results' : S.area === '*' ? 'All areas' : S.area;
+  $('prog').innerHTML = esc(label) + ': <b>' + done + '</b> of ' + base.length + ' entered' +
+    '<div class="pbar"><i style="width:' + (base.length ? Math.round(done / base.length * 100) : 0) + '%"></i></div>';
+  renderFooter();
+}
+
+function card(i) {
+  var p = S.pending[i.id] || {};
+  var lot = isLotArea(i.area);
+  var low = isLow(i);
+  var meta = [i.unit, i.location, i.barcode ? '#' + i.barcode : ''].filter(String).map(esc).join(' · ');
+  var pills = (low ? '<span class="pill low">LOW</span>' : '') + (i.min !== '' ? ' <span class="meta">min ' + fmt(i.min) + '</span>' : '');
+  var expSoon = lot && i.expIso && (new Date(i.expIso) - new Date()) < 1000 * 60 * 60 * 24 * 60;
+  var d = diffHtml(i, p.count);
+  return '<div class="card' + (p.count !== undefined && p.count !== '' || p.lot || p.exp ? ' entered' : '') + (low ? ' low' : '') + '" id="c-' + esc(i.id) + '" data-id="' + esc(i.id) + '">' +
+    '<div class="r1"><div class="nm">' + esc(i.name) + pills + (expSoon ? '<span class="pill exp">EXP ' + esc(i.exp) + '</span>' : '') + '</div>' +
+    '<button class="ico" data-act="hist" aria-label="History">' + ICON.hist + '</button>' +
+    (S.canManage ? '<button class="ico" data-act="edit" aria-label="Edit item">' + ICON.edit + '</button>' : '') + '</div>' +
+    (meta ? '<div class="meta">' + meta + '</div>' : '') +
+    '<div class="r2"><div class="last">Last: <b>' + fmt(i.count) + '</b>' +
+      '<small>' + (i.last ? esc(i.last) + (i.by ? ' · ' + esc(i.by.replace(/\s*\(.*\)$/, '')) : '') : 'Not counted yet') + '</small></div>' +
+      '<span class="diff ' + d.cls + '">' + d.txt + '</span>' +
+      '<div class="entry">' + (i.count !== '' ? '<button class="same" data-act="same">Same</button>' : '') +
+      '<input class="cnt" data-f="count" type="number" inputmode="decimal" step="any" min="0" enterkeyhint="next" placeholder="New" value="' + (p.count !== undefined ? esc(p.count) : '') + '" aria-label="New count for ' + esc(i.name) + '"></div></div>' +
+    (lot ? '<div class="lotrow"><label>Lot #' + (i.lot ? ' (now ' + esc(i.lot) + ')' : '') + '<input data-f="lot" value="' + esc(p.lot || '') + '" placeholder="' + esc(i.lot || 'Optional') + '"></label>' +
+      '<label>Expiration' + (i.exp ? ' (now ' + esc(i.exp) + ')' : '') + '<input data-f="exp" type="date" value="' + esc(p.exp || '') + '"></label></div>' : '') +
+    '</div>';
+}
+
+function diffHtml(i, v) {
+  if (v === undefined || v === '' || i.count === '') return { cls: '', txt: '' };
+  var d = Number(v) - Number(i.count);
+  if (isNaN(d) || d === 0) return { cls: '', txt: d === 0 ? '±0' : '' };
+  return { cls: d > 0 ? 'up' : 'down', txt: (d > 0 ? '+' : '') + fmt(d) };
+}
+
+function itemById(id) { return D.items.filter(function (i) { return i.id === id; })[0]; }
+
+function onEntry(e) {
+  var f = e.target.getAttribute('data-f'); if (!f) return;
+  var c = e.target.closest('.card'); var id = c.getAttribute('data-id'); var i = itemById(id);
+  var p = S.pending[id] || {};
+  var v = e.target.value.trim();
+  if (f === 'count') {
+    var bad = v !== '' && (isNaN(Number(v)) || Number(v) < 0);
+    e.target.classList.toggle('bad', bad);
+    if (v === '') delete p.count; else p.count = v;
+    var d = diffHtml(i, bad ? '' : v); var de = c.querySelector('.diff'); de.className = 'diff ' + d.cls; de.textContent = d.txt;
+  } else { if (v === '') delete p[f]; else p[f] = v; }
+  if (Object.keys(p).length) S.pending[id] = p; else delete S.pending[id];
+  c.classList.toggle('entered', !!S.pending[id]);
+  saveDraft(); renderFooter(); updateProgress();
+}
+
+function updateProgress() {
+  var base = visible();
+  var done = base.filter(function (i) { return S.pending[i.id]; }).length;
+  var b = $('prog').querySelector('b'); if (b) b.textContent = done;
+  var bar = $('prog').querySelector('.pbar i'); if (bar) bar.style.width = (base.length ? Math.round(done / base.length * 100) : 0) + '%';
+}
+
+function onCardClick(e) {
+  var b = e.target.closest('[data-act]'); if (!b) return;
+  var c = b.closest('.card'); var id = c.getAttribute('data-id'); var i = itemById(id);
+  var act = b.getAttribute('data-act');
+  if (act === 'same') { var inp = c.querySelector('.cnt'); inp.value = i.count; inp.dispatchEvent(new Event('input', { bubbles: true })); var all = [].slice.call(document.querySelectorAll('.cnt')); var nx = all[all.indexOf(inp) + 1]; if (nx && nx.scrollIntoView) nx.closest('.card').scrollIntoView({ block: 'center', behavior: 'smooth' }); }
+  if (act === 'hist') showHistory(i);
+  if (act === 'edit') openItem(i);
+}
+
+function renderFooter() {
+  var n = Object.keys(S.pending).length;
+  var bad = document.querySelector('.cnt.bad');
+  $('finfo').innerHTML = n ? '<b>' + n + '</b> item' + (n === 1 ? '' : 's') + ' ready to save' : 'Type a count on any item, then tap Save. You only need to fill in what you counted.';
+  $('saveBtn').disabled = !n || S.saving || !!bad;
+  $('saveBtn').textContent = S.saving ? 'Saving…' : n ? 'Save ' + n : 'Save';
+  $('clearBtn').classList.toggle('hidden', !n || S.saving);
+}
+
+function saveDraft() { store(LS_DRAFT, Object.keys(S.pending).length ? JSON.stringify(S.pending) : null); }
+
+function jumpTo(idOrCode) {
+  var i = itemById(idOrCode) || D.items.filter(function (x) { return x.barcode && x.barcode.toLowerCase() === String(idOrCode).toLowerCase(); })[0];
+  if (!i) { toast('Item ' + idOrCode + ' was not found.', true); return; }
+  S.area = D.areas.filter(function (a) { return a.toLowerCase() === i.area.toLowerCase(); })[0] || '*';
+  S.filter = 'all'; renderTabs(); renderList();
+  var c = $('c-' + i.id); if (!c) return;
+  c.scrollIntoView({ block: 'center' });
+  c.classList.add('flash'); setTimeout(function () { c.classList.remove('flash'); }, 1800);
+  var inp = c.querySelector('.cnt'); if (inp) setTimeout(function () { inp.focus(); }, 250);
+}
+
+/* ---------- Save ---------- */
+function save() {
+  if (!S.name) { askName(); return; }
+  var entries = Object.keys(S.pending).map(function (id) { var p = S.pending[id]; return { id: id, count: p.count === undefined ? '' : p.count, lot: p.lot || '', exp: p.exp || '' }; });
+  if (!entries.length) return;
+  S.saving = true; renderFooter();
+  run('saveCounts', { name: S.name, entries: entries }).then(function (r) {
+    S.pending = {}; saveDraft();
+    return load().then(function () {
+      S.saving = false; renderTabs(); renderList();
+      toast('Saved ' + r.saved + ' count' + (r.saved === 1 ? '' : 's') + '.' + (r.alerts ? ' Low-stock email sent.' : ''));
+    });
+  }).catch(function (e) {
+    S.saving = false; renderFooter();
+    toast('Not saved: ' + (e && e.message || e) + ' Your counts are still here. Try again.', true);
+  });
+}
+window.addEventListener('beforeunload', function (e) { if (Object.keys(S.pending).length && !S.saving) { e.preventDefault(); e.returnValue = ''; } });
+
+/* ---------- History ---------- */
+function showHistory(i) {
+  $('hTitle').textContent = i.name;
+  $('hSub').textContent = i.area + (i.unit ? ' · ' + i.unit : '');
+  $('hList').innerHTML = '<li class="w">Loading…</li>';
+  showM('mHist');
+  run('getItemHistory', i.id).then(function (rows) {
+    if (!rows.length) { $('hList').innerHTML = '<li class="w">No counts yet.</li>'; return; }
+    $('hList').innerHTML = rows.map(function (r) {
+      var d = r.prev === '' || r.prev == null ? '' : Number(r.count) - Number(r.prev);
+      return '<li><b>' + fmt(r.count) + '</b>' + (d !== '' && d !== 0 ? ' <span class="diff ' + (d > 0 ? 'up' : 'down') + '">' + (d > 0 ? '+' : '') + fmt(d) + '</span>' : '') +
+        (r.lot ? ' · Lot ' + esc(r.lot) : '') + (r.exp ? ' · Exp ' + esc(r.exp) : '') +
+        '<div class="w">' + esc(r.when) + ' · ' + esc(String(r.by || '').replace(/\s*\(.*\)$/, '')) + (r.note ? ' · ' + esc(r.note) : '') + '</div></li>';
+    }).join('');
+  }).catch(function (e) { $('hList').innerHTML = '<li class="w">Could not load history: ' + esc(e && e.message || e) + '</li>'; });
+}
+
+/* ---------- Add / edit / delete items ---------- */
+var editing = null;
+function openItem(i) {
+  if (!S.name) { askName(); return; }
+  editing = i;
+  $('itTitle').textContent = i ? 'Edit item' : 'Add item';
+  $('itSub').textContent = i ? 'Changes apply right away for everyone. Counts and history stay the same.' : 'The new item shows up for everyone, in alphabetical order.';
+  $('itArea').innerHTML = D.areas.map(function (a) { return '<option>' + esc(a) + '</option>'; }).join('');
+  $('itName').value = i ? i.name : (S.q || '');
+  $('itArea').value = i ? i.area : (S.area !== '*' ? S.area : D.areas[0]);
+  $('itUnit').value = i ? i.unit : 'each';
+  $('itLoc').value = i ? i.location : '';
+  $('itMin').value = i && i.min !== '' ? i.min : '';
+  $('itBc').value = i ? i.barcode : '';
+  $('itNotes').value = i ? i.notes : '';
+  $('itCount').value = '';
+  $('itCountWrap').classList.toggle('hidden', !!i);
+  $('itDel').classList.toggle('hidden', !i);
+  $('itErr').textContent = '';
+  $('itSave').disabled = false; $('itSave').textContent = 'Save item';
+  showM('mItem');
+  if (!i) setTimeout(function () { $('itName').focus(); }, 100);
+}
+$('itSave').onclick = function () {
+  var item = { id: editing ? editing.id : '', name: $('itName').value, area: $('itArea').value, unit: $('itUnit').value, location: $('itLoc').value,
+    min: $('itMin').value.trim(), barcode: $('itBc').value, notes: $('itNotes').value, count: editing ? '' : $('itCount').value.trim() };
+  if (!item.name.trim()) { $('itErr').textContent = 'Give the item a name.'; return; }
+  $('itSave').disabled = true; $('itSave').textContent = 'Saving…';
+  run('saveItem', item, S.name).then(function (r) {
+    return load().then(function () { hideM('mItem'); renderTabs(); renderList(); toast(editing ? 'Item updated.' : 'Item added.'); if (!editing) jumpTo(r.id); });
+  }).catch(function (e) { $('itErr').textContent = e && e.message || String(e); $('itSave').disabled = false; $('itSave').textContent = 'Save item'; });
+};
+$('itDel').onclick = function () {
+  var i = editing;
+  $('cTitle').textContent = 'Delete “' + i.name + '”?';
+  $('cText').textContent = 'It disappears from the page for everyone. Its count history stays in the Sheet, and the item is kept on the Deleted Items tab.';
+  $('cOk').textContent = 'Delete';
+  $('cOk').onclick = function () {
+    $('cOk').disabled = true;
+    run('deleteItem', i.id, S.name).then(function () {
+      delete S.pending[i.id]; saveDraft();
+      return load().then(function () { $('cOk').disabled = false; hideM('mConfirm'); hideM('mItem'); renderTabs(); renderList(); toast('Item deleted.'); });
+    }).catch(function (e) { $('cOk').disabled = false; hideM('mConfirm'); $('itErr').textContent = e && e.message || String(e); });
+  };
+  showM('mConfirm');
+};
+
+/* ---------- QR codes page ---------- */
+function renderQR() {
+  var base = HOME;
+  $('app').innerHTML =
+    '<header class="noprint"><div class="top"><h1>QR codes to print</h1><a class="who" style="text-decoration:none" href="' + esc(base) + '">Back</a></div><div style="height:12px"></div></header>' +
+    '<div class="qrwrap">' +
+    '<div class="noprint"><label class="f">Page link the codes open<input id="qrBase" value="' + esc(base) + '" placeholder="Paste the web app link (ends in /exec)"></label>' +
+    '<div class="acts" style="margin-bottom:16px"><button class="btn ghost" id="qrMake">Update codes</button><span class="sp"></span><button class="btn primary" onclick="window.print()">Print</button></div></div>' +
+    '<div class="qrgrid" id="qrAreas"></div>' +
+    '<div class="noprint" style="margin:26px 0 10px"><label class="f">Item stickers (one code per item, opens straight to that item)<select id="qrItemArea"><option value="">Don\'t show item stickers</option>' +
+      D.areas.map(function (a) { return '<option>' + esc(a) + '</option>'; }).join('') + '</select></label></div>' +
+    '<div class="qrgrid items" id="qrItems"></div></div>';
+  var s = document.createElement('script');
+  s.src = 'https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js';
+  s.onload = drawQR;
+  s.onerror = function () { $('qrAreas').innerHTML = '<div class="empty">Could not load the QR code maker. Check your internet connection and reload.</div>'; };
+  document.head.appendChild(s);
+  $('qrMake').onclick = drawQR;
+  $('qrItemArea').onchange = drawQR;
+}
+function qrCard(title, url, size) {
+  var d = document.createElement('div'); d.className = 'qrcard';
+  d.innerHTML = '<h3>' + esc(title) + '</h3><div class="q"></div><small>Scan to count inventory</small>';
+  new QRCode(d.querySelector('.q'), { text: url, width: size, height: size, correctLevel: QRCode.CorrectLevel.M });
+  return d;
+}
+function drawQR() {
+  var base = $('qrBase').value.trim().replace(/[?#].*$/, '');
+  var A = $('qrAreas'), I = $('qrItems'); A.innerHTML = ''; I.innerHTML = '';
+  if (!base) { A.innerHTML = '<div class="empty">Paste the page link above, then tap Update codes.</div>'; return; }
+  A.appendChild(qrCard('All inventory', base, 170));
+  D.areas.forEach(function (a) { A.appendChild(qrCard(a, base + '?area=' + encodeURIComponent(a), 170)); });
+  var ia = $('qrItemArea').value;
+  if (ia) D.items.filter(function (i) { return i.area.toLowerCase() === ia.toLowerCase(); }).forEach(function (i) {
+    I.appendChild(qrCard(i.name, base + '?item=' + encodeURIComponent(i.id), 110));
+  });
+}
+
+start();
+</script>
+</body>
+</html>
