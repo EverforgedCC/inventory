@@ -6,9 +6,11 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Inventory">
 <meta name="theme-color" content="#1F3B4D">
+<meta name="color-scheme" content="light only">
 <title>EverForged Inventory</title>
 <style>
   :root {
+    color-scheme: light only;
     --ink: #1c2730; --muted: #66727c; --line: #e2e6ea; --bg: #f4f6f8; --card: #fff;
     --brand: #1F3B4D; --brand-2: #2d556e; --ok: #1f7a4d; --ok-bg: #e7f5ee;
     --low: #a3222d; --low-bg: #fbe9eb; --warn-bg: #fff6dd;
@@ -17,7 +19,9 @@
   html, body { margin: 0; background: var(--bg); color: var(--ink);
     font: 16px/1.35 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; }
   button { font: inherit; cursor: pointer; }
-  input, select, textarea { font: inherit; color: inherit; }
+  input, select, textarea { font: inherit; color: var(--ink); -webkit-text-fill-color: var(--ink); background-color: #fff; caret-color: var(--brand); }
+  input[type=search]::-webkit-search-cancel-button, input[type=search]::-webkit-search-decoration { -webkit-appearance: none; appearance: none; }
+  input::placeholder, textarea::placeholder { color: #8a949c; -webkit-text-fill-color: #8a949c; opacity: 1; }
   .hidden { display: none !important; }
 
   header { position: sticky; top: 0; z-index: 20; background: var(--brand); color: #fff;
