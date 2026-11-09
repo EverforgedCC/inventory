@@ -56,7 +56,14 @@
   .card.low { border-left-color: var(--low); }
   .card.entered.low { border-left-color: var(--ok); }
   .card.flash { box-shadow: 0 0 0 3px #f1c45a; }
-  .r1 { display: flex; align-items: flex-start; gap: 6px; }
+  .r1 { display: flex; align-items: flex-start; gap: 10px; }
+  .thumb { flex: none; width: 56px; height: 56px; border-radius: 10px; border: 0; padding: 0; overflow: hidden; background: var(--bg); position: relative; }
+  .thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .thumb.empty { border: 1.5px dashed #c3cbd2; color: #9aa5ae; display: flex; align-items: center; justify-content: center; }
+  .thumb.loading::after { content: ''; position: absolute; inset: 18px; border: 3px solid var(--line); border-top-color: var(--brand); border-radius: 50%; animation: sp .8s linear infinite; }
+  .nmwrap { flex: 1; min-width: 0; }
+  #mConfirm { z-index: 70; }
+  #pvImg { width: 100%; max-height: 68vh; object-fit: contain; background: #111; border-radius: 10px; display: block; }
   .nm { flex: 1; font-weight: 600; font-size: 16px; }
   .ico { border: 0; background: none; padding: 4px 6px; color: var(--muted); border-radius: 8px; }
   .ico:active { background: var(--bg); }
@@ -198,6 +205,16 @@
   <div class="err" id="scanErr"></div>
   <div class="acts"><span class="sp"></span><button class="btn ghost" id="scanCancel">Cancel</button></div>
 </div></div>
+
+<!-- Item photo -->
+<div id="mView" class="modal hidden"><div class="sheet">
+  <h2 id="pvTitle"></h2>
+  <p class="sub" id="pvSub"></p>
+  <img id="pvImg" alt="">
+  <div class="err" id="pvErr"></div>
+  <div class="acts"><button class="btn danger" id="pvDel">Remove</button><button class="btn ghost" id="pvRep">Replace</button><span class="sp"></span><button class="btn primary" data-close="mView">Close</button></div>
+</div></div>
+<input type="file" id="photoFile" accept="image/*" class="hidden">
 
 <script>
 var API = 'https://script.google.com/macros/s/AKfycbz39-bGlzxb89N09EG6W7C1qrEY3Z2-soZbLOr8YruYPVQgdCtKjcNopDTLhgphXkKytg/exec';
@@ -389,6 +406,7 @@ function renderList() {
       (S.canManage && !S.q && S.filter === 'all' ? '<br><br><button class="btn primary" onclick="openItem(null)">+ Add the first item</button>' : '') + '</div>';
   }
   $('list').innerHTML = html;
+  fillPreviews();
 
   var done = base.filter(function (i) { return S.pending[i.id]; }).length;
   var label = S.q ? 'Search results' : S.area === '*' ? 'All areas' : S.area;
@@ -406,10 +424,10 @@ function card(i) {
   var expSoon = lot && i.expIso && (new Date(i.expIso) - new Date()) < 1000 * 60 * 60 * 24 * 60;
   var d = diffHtml(i, p.count);
   return '<div class="card' + (p.count !== undefined && p.count !== '' || p.lot || p.exp ? ' entered' : '') + (low ? ' low' : '') + '" id="c-' + esc(i.id) + '" data-id="' + esc(i.id) + '">' +
-    '<div class="r1"><div class="nm">' + esc(i.name) + pills + (expSoon ? '<span class="pill exp">EXP ' + esc(i.exp) + '</span>' : '') + '</div>' +
+    '<div class="r1">' + thumbHtml(i) + '<div class="nmwrap"><div class="nm">' + esc(i.name) + pills + (expSoon ? '<span class="pill exp">EXP ' + esc(i.exp) + '</span>' : '') + '</div>' +
+    (meta ? '<div class="meta">' + meta + '</div>' : '') + '</div>' +
     '<button class="ico" data-act="hist" aria-label="History">' + ICON.hist + '</button>' +
     (S.canManage ? '<button class="ico" data-act="edit" aria-label="Edit item">' + ICON.edit + '</button>' : '') + '</div>' +
-    (meta ? '<div class="meta">' + meta + '</div>' : '') +
     '<div class="r2"><div class="last">Last: <b>' + fmt(i.count) + '</b>' +
       '<small>' + (i.last ? esc(i.last) + (i.by ? ' · ' + esc(i.by.replace(/\s*\(.*\)$/, '')) : '') : 'Not counted yet') + '</small></div>' +
       '<span class="diff ' + d.cls + '">' + d.txt + '</span>' +
@@ -458,6 +476,7 @@ function onCardClick(e) {
   var act = b.getAttribute('data-act');
   if (act === 'same') { var inp = c.querySelector('.cnt'); inp.value = i.count; inp.dispatchEvent(new Event('input', { bubbles: true })); var all = [].slice.call(document.querySelectorAll('.cnt')); var nx = all[all.indexOf(inp) + 1]; if (nx && nx.scrollIntoView) nx.closest('.card').scrollIntoView({ block: 'center', behavior: 'smooth' }); }
   if (act === 'hist') showHistory(i);
+  if (act === 'photo') { if (i.hasPhoto) viewPhoto(i); else if (S.canManage) pickPhoto(i); }
   if (act === 'edit') openItem(i);
 }
 
@@ -638,6 +657,104 @@ function unknownCode(code) {
   $('cOk').onclick = function () { hideM('mConfirm'); openItem(null); $('itBc').value = code; $('itName').value = ''; };
   showM('mConfirm');
 }
+
+/* ---------- Item photos ---------- */
+var fullCache = {}, previewQueue = [], previewBusy = false, photoTarget = null, viewingItem = null;
+function thumbHtml(i) {
+  if (i.hasPhoto) {
+    return '<button class="thumb' + (i.preview ? '' : ' loading') + '" data-act="photo" data-thumb="' + esc(i.id) + '" aria-label="See photo of ' + esc(i.name) + '">' +
+      (i.preview ? '<img src="' + esc(i.preview) + '" alt="">' : '') + '</button>';
+  }
+  if (!S.canManage) return '<span class="thumb empty" aria-hidden="true">' + ICON.cam + '</span>';
+  return '<button class="thumb empty" data-act="photo" aria-label="Add a photo of ' + esc(i.name) + '">' + ICON.cam + '</button>';
+}
+function setThumb(i) {
+  var c = $('c-' + i.id); if (!c) return;
+  var b = c.querySelector('.thumb'); if (!b) return;
+  var tmp = document.createElement('div'); tmp.innerHTML = thumbHtml(i);
+  b.replaceWith(tmp.firstChild);
+}
+function shrink(src, max, q) {
+  return new Promise(function (ok, no) {
+    var img = new Image();
+    img.onload = function () {
+      var sc = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight));
+      var c = document.createElement('canvas');
+      c.width = Math.max(1, Math.round(img.naturalWidth * sc)); c.height = Math.max(1, Math.round(img.naturalHeight * sc));
+      var g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height); g.drawImage(img, 0, 0, c.width, c.height);
+      ok(c.toDataURL('image/jpeg', q));
+    };
+    img.onerror = function () { no(new Error('This phone could not open that file as a photo.')); };
+    img.src = src;
+  });
+}
+function makePreview(src) {
+  return shrink(src, 200, 0.72).then(function (p) { return p.length > 44000 ? shrink(src, 140, 0.6) : p; });
+}
+function fillPreviews() {
+  visible().forEach(function (i) { if (i.hasPhoto && !i.preview && previewQueue.indexOf(i) < 0) previewQueue.push(i); });
+  nextPreview();
+}
+function nextPreview() {
+  if (previewBusy || !previewQueue.length) return;
+  previewBusy = true;
+  var i = previewQueue.shift();
+  run('getItemPhoto', i.id).then(function (full) {
+    if (!full) { i.hasPhoto = false; return; }
+    fullCache[i.id] = full;
+    return makePreview(full).then(function (p) { i.preview = p; run('savePreview', i.id, p).catch(function () {}); });
+  }).catch(function () {}).then(function () { setThumb(i); previewBusy = false; nextPreview(); });
+}
+function viewPhoto(i) {
+  viewingItem = i;
+  $('pvTitle').textContent = i.name;
+  $('pvSub').textContent = i.area;
+  $('pvErr').textContent = '';
+  $('pvImg').src = i.preview || '';
+  $('pvDel').classList.toggle('hidden', !S.canManage);
+  $('pvRep').classList.toggle('hidden', !S.canManage);
+  showM('mView');
+  var show = function (src) { if (viewingItem === i) $('pvImg').src = src; };
+  if (fullCache[i.id]) return show(fullCache[i.id]);
+  run('getItemPhoto', i.id).then(function (src) { if (src) { fullCache[i.id] = src; show(src); } })
+    .catch(function (e) { $('pvErr').textContent = 'Could not load the full photo: ' + (e && e.message || e); });
+}
+function pickPhoto(i) {
+  if (!S.name) { askName(); return; }
+  photoTarget = i; $('photoFile').value = ''; $('photoFile').click();
+}
+$('pvRep').onclick = function () { pickPhoto(viewingItem); };
+$('photoFile').onchange = function () {
+  var f = this.files && this.files[0], i = photoTarget;
+  if (!f || !i) return;
+  var url = URL.createObjectURL(f);
+  hideM('mView');
+  i.hasPhoto = true; i.preview = ''; setThumb(i);
+  toast('Saving photo…');
+  Promise.all([shrink(url, 1200, 0.82), makePreview(url)]).then(function (r) {
+    URL.revokeObjectURL(url);
+    return run('setPhoto', i.id, { image: r[0], preview: r[1] }, S.name).then(function (res) {
+      fullCache[i.id] = r[0]; i.preview = res.preview || r[1]; setThumb(i); toast('Photo saved.');
+    });
+  }).catch(function (e) {
+    i.hasPhoto = false; i.preview = ''; setThumb(i);
+    toast('Photo not saved: ' + (e && e.message || e), true);
+  });
+};
+$('pvDel').onclick = function () {
+  var i = viewingItem;
+  $('cTitle').textContent = 'Remove this photo?';
+  $('cText').textContent = 'The photo is removed from "' + i.name + '" in the app and the Sheet. You can undo it in the Sheet with Edit › Undo or Version history.';
+  $('cOk').textContent = 'Remove'; $('cOk').className = 'btn danger';
+  $('cOk').onclick = function () {
+    $('cOk').disabled = true;
+    run('removePhoto', i.id, S.name).then(function () {
+      $('cOk').disabled = false; hideM('mConfirm'); hideM('mView');
+      i.hasPhoto = false; i.preview = ''; delete fullCache[i.id]; setThumb(i); toast('Photo removed.');
+    }).catch(function (e) { $('cOk').disabled = false; hideM('mConfirm'); toast('Not removed: ' + (e && e.message || e), true); });
+  };
+  showM('mConfirm');
+};
 
 /* ---------- QR codes page ---------- */
 function renderQR() {
