@@ -86,6 +86,7 @@
   .cnt.bad { border-color: var(--low); background: var(--low-bg); }
   .diff { font-size: 12px; font-weight: 700; min-width: 34px; text-align: right; }
   .diff.up { color: var(--ok); } .diff.down { color: var(--low); }
+  .diff.st { color: var(--muted); font-weight: 600; } .diff.ok { color: var(--ok); } .diff.fail { color: var(--low); }
   .lotrow { display: flex; gap: 8px; margin-top: 8px; }
   .lotrow label { flex: 1; font-size: 12px; color: var(--muted); }
   .lotrow input { display: block; width: 100%; margin-top: 2px; border: 1px solid #c9d0d6; border-radius: 8px; padding: 8px; font-size: 15px; background: #fff; }
@@ -226,7 +227,7 @@ var BOOT = (function () { var q = new URLSearchParams(location.search); return {
 var HOME = location.origin + location.pathname;
 var LS_NAME = 'efinv_name', LS_DRAFT = 'efinv_draft';
 var D = null;                 // data from the Sheet
-var S = { area: '', q: '', filter: 'all', pending: {}, name: '', canManage: true, saving: false };
+var S = { area: '', q: '', filter: 'all', pending: {}, done: {}, name: '', canManage: true, saving: false };
 
 function store(k, v) { try { if (v === undefined) return localStorage.getItem(k); if (v === null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch (e) { return null; } }
 function $(id) { return document.getElementById(id); }
@@ -325,19 +326,27 @@ function renderShell() {
   });
   $('addBtn').onclick = function () { openItem(null); };
   $('scanBtn').onclick = function () { openScanner('jump'); };
-  $('saveBtn').onclick = save;
+  $('saveBtn').onclick = function () { queueSave(Object.keys(S.pending)); };
   $('clearBtn').onclick = confirmClear;
   var list = $('list');
   list.addEventListener('input', onEntry);
   list.addEventListener('change', onEntry);
   list.addEventListener('click', onCardClick);
   list.addEventListener('keydown', function (e) {
-    if (e.key === 'Enter' && e.target.classList.contains('cnt')) {
-      e.preventDefault();
-      var all = [].slice.call(list.querySelectorAll('.cnt'));
-      var nx = all[all.indexOf(e.target) + 1];
-      if (nx) { nx.focus(); nx.scrollIntoView({ block: 'center', behavior: 'smooth' }); } else e.target.blur();
-    }
+    if (e.key !== 'Enter' || !e.target.getAttribute('data-f')) return;
+    e.preventDefault();
+    var c = e.target.closest('.card');
+    // Lab cards: Enter in the count box moves to Lot # first
+    if (e.target.classList.contains('cnt')) { var lotIn = c.querySelector('[data-f=lot]'); if (lotIn) { lotIn.focus(); return; } }
+    queueSave([c.getAttribute('data-id')]);
+    var all = [].slice.call(list.querySelectorAll('.cnt'));
+    var nx = all[all.indexOf(c.querySelector('.cnt')) + 1];
+    if (nx) { nx.focus(); nx.scrollIntoView({ block: 'center', behavior: 'smooth' }); } else e.target.blur();
+  });
+  list.addEventListener('focusout', function (e) {
+    var c = e.target.closest && e.target.closest('.card'); if (!c) return;
+    if (e.relatedTarget && c.contains(e.relatedTarget)) return; // still inside this item
+    queueSave([c.getAttribute('data-id')]);
   });
   renderTabs(); renderList();
 }
@@ -393,7 +402,7 @@ function renderList() {
   $('addBtn').classList.toggle('hidden', !S.canManage);
   var base = visible();
   var shown = base.filter(function (i) {
-    if (S.filter === 'todo') return !S.pending[i.id];
+    if (S.filter === 'todo') return !S.pending[i.id] && !S.done[i.id];
     if (S.filter === 'low') return isLow(i);
     return true;
   });
@@ -412,7 +421,7 @@ function renderList() {
   $('list').innerHTML = html;
   fillPreviews();
 
-  var done = base.filter(function (i) { return S.pending[i.id]; }).length;
+  var done = base.filter(function (i) { return S.pending[i.id] || S.done[i.id]; }).length;
   var label = S.q ? 'Search results' : S.area === '*' ? 'All areas' : S.area;
   $('prog').innerHTML = esc(label) + ': <b>' + done + '</b> of ' + base.length + ' entered' +
     '<div class="pbar"><i style="width:' + (base.length ? Math.round(done / base.length * 100) : 0) + '%"></i></div>';
@@ -426,7 +435,7 @@ function card(i) {
   var meta = [i.unit, i.location, i.barcode ? '#' + i.barcode : ''].filter(String).map(esc).join(' · ');
   var pills = (low ? '<span class="pill low">LOW</span>' : '') + (i.min !== '' ? ' <span class="meta">min ' + fmt(i.min) + '</span>' : '');
   var expSoon = lot && i.expIso && (new Date(i.expIso) - new Date()) < 1000 * 60 * 60 * 24 * 60;
-  var d = diffHtml(i, p.count);
+  var d = statusFor(i) || diffHtml(i, p.count);
   return '<div class="card' + (p.count !== undefined && p.count !== '' || p.lot || p.exp ? ' entered' : '') + (low ? ' low' : '') + '" id="c-' + esc(i.id) + '" data-id="' + esc(i.id) + '">' +
     '<div class="r1">' + thumbHtml(i) + '<div class="nmwrap"><div class="nm">' + esc(i.name) + pills + (expSoon ? '<span class="pill exp">EXP ' + esc(i.exp) + '</span>' : '') + '</div>' +
     (meta ? '<div class="meta">' + meta + '</div>' : '') + '</div>' +
@@ -469,7 +478,7 @@ function onEntry(e) {
 
 function updateProgress() {
   var base = visible();
-  var done = base.filter(function (i) { return S.pending[i.id]; }).length;
+  var done = base.filter(function (i) { return S.pending[i.id] || S.done[i.id]; }).length;
   var b = $('prog').querySelector('b'); if (b) b.textContent = done;
   var bar = $('prog').querySelector('.pbar i'); if (bar) bar.style.width = (base.length ? Math.round(done / base.length * 100) : 0) + '%';
 }
@@ -478,7 +487,7 @@ function onCardClick(e) {
   var b = e.target.closest('[data-act]'); if (!b) return;
   var c = b.closest('.card'); var id = c.getAttribute('data-id'); var i = itemById(id);
   var act = b.getAttribute('data-act');
-  if (act === 'same') { var inp = c.querySelector('.cnt'); inp.value = i.count; inp.dispatchEvent(new Event('input', { bubbles: true })); var all = [].slice.call(document.querySelectorAll('.cnt')); var nx = all[all.indexOf(inp) + 1]; if (nx && nx.scrollIntoView) nx.closest('.card').scrollIntoView({ block: 'center', behavior: 'smooth' }); }
+  if (act === 'same') { var inp = c.querySelector('.cnt'); inp.value = i.count; inp.dispatchEvent(new Event('input', { bubbles: true })); if (!c.querySelector('[data-f=lot]')) queueSave([id]); var all = [].slice.call(document.querySelectorAll('.cnt')); var nx = all[all.indexOf(inp) + 1]; if (nx && nx.scrollIntoView) nx.closest('.card').scrollIntoView({ block: 'center', behavior: 'smooth' }); }
   if (act === 'hist') showHistory(i);
   if (act === 'photo') { if (i.hasPhoto) viewPhoto(i); else if (S.canManage) pickPhoto(i); }
   if (act === 'edit') openItem(i);
@@ -487,9 +496,9 @@ function onCardClick(e) {
 function renderFooter() {
   var n = Object.keys(S.pending).length;
   var bad = document.querySelector('.cnt.bad');
-  $('finfo').innerHTML = n ? '<b>' + n + '</b> item' + (n === 1 ? '' : 's') + ' ready to save' : 'Type a count on any item, then tap Save. You only need to fill in what you counted.';
+  $('finfo').innerHTML = S.saving ? 'Saving…' : n ? '<b>' + n + '</b> not saved yet. Tap Save, or press Enter / Next.' : 'Counts save on their own when you press Enter or Next, or move to another item.';
   $('saveBtn').disabled = !n || S.saving || !!bad;
-  $('saveBtn').textContent = S.saving ? 'Saving…' : n ? 'Save ' + n : 'Save';
+  $('saveBtn').textContent = n ? 'Save ' + n : 'Save';
   $('clearBtn').classList.toggle('hidden', !n || S.saving);
 }
 
@@ -506,24 +515,74 @@ function jumpTo(idOrCode) {
   var inp = c.querySelector('.cnt'); if (inp) setTimeout(function () { inp.focus(); }, 250);
 }
 
-/* ---------- Save ---------- */
-function save() {
-  if (!S.name) { askName(); return; }
-  var entries = Object.keys(S.pending).map(function (id) { var p = S.pending[id]; return { id: id, count: p.count === undefined ? '' : p.count, lot: p.lot || '', exp: p.exp || '' }; });
-  if (!entries.length) return;
+/* ---------- Save (each item saves when you move on; Save button saves anything left) ---------- */
+var toSend = {}, cardStatus = {};
+function statusFor(i) {
+  var st = cardStatus[i.id];
+  if (!st) return null;
+  return st === 'saving' ? { cls: 'st', txt: 'Saving…' } : st === 'ok' ? { cls: 'ok', txt: '✓ Saved' } : { cls: 'fail', txt: 'Not saved' };
+}
+function setStatus(id, st) {
+  if (st) cardStatus[id] = st; else delete cardStatus[id];
+  var c = $('c-' + id); if (!c) return;
+  var i = itemById(id); var de = c.querySelector('.diff'); if (!de || !i) return;
+  var d = statusFor(i) || diffHtml(i, (S.pending[id] || {}).count);
+  de.className = 'diff ' + d.cls; de.textContent = d.txt;
+}
+function validEntry(id) {
+  var p = S.pending[id]; if (!p) return false;
+  if (p.count !== undefined && p.count !== '' && (isNaN(Number(p.count)) || Number(p.count) < 0)) return false;
+  return true;
+}
+function queueSave(ids) {
+  ids.forEach(function (id) { if (validEntry(id)) toSend[id] = 1; });
+  flushSaves();
+}
+function flushSaves() {
+  if (S.saving) return;
+  var ids = Object.keys(toSend).filter(validEntry);
+  toSend = {};
+  if (!ids.length) return;
+  if (!S.name) { askName(); ids.forEach(function (id) { toSend[id] = 1; }); return; }
+  var snap = {}, entries = ids.map(function (id) {
+    var p = S.pending[id]; snap[id] = JSON.stringify(p);
+    return { id: id, count: p.count === undefined ? '' : p.count, lot: p.lot || '', exp: p.exp || '' };
+  });
   S.saving = true; renderFooter();
+  ids.forEach(function (id) { setStatus(id, 'saving'); });
   run('saveCounts', { name: S.name, entries: entries }).then(function (r) {
-    S.pending = {}; saveDraft();
-    return load().then(function () {
-      S.saving = false; renderTabs(); renderList();
-      toast('Saved ' + r.saved + ' count' + (r.saved === 1 ? '' : 's') + '.' + (r.alerts ? ' Low-stock email sent.' : ''));
+    entries.forEach(function (en) {
+      var i = itemById(en.id); if (!i) return;
+      if (en.count !== '') i.count = Number(en.count);
+      i.last = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+      i.by = S.name;
+      if (en.lot) i.lot = en.lot;
+      if (en.exp) { i.expIso = en.exp; var q = en.exp.split('-'); i.exp = Number(q[1]) + '/' + Number(q[2]) + '/' + q[0]; }
+      S.done[en.id] = 1;
+      if (JSON.stringify(S.pending[en.id]) === snap[en.id]) delete S.pending[en.id];
+      refreshCard(i, 'ok');
     });
+    saveDraft();
+    if (r.alerts) toast('Saved. Low-stock email sent.');
+    else if (entries.length > 1) toast('Saved ' + entries.length + ' counts.');
   }).catch(function (e) {
-    S.saving = false; renderFooter();
-    toast('Not saved: ' + (e && e.message || e) + ' Your counts are still here. Try again.', true);
+    ids.forEach(function (id) { setStatus(id, 'fail'); });
+    toast('Not saved: ' + (e && e.message || e) + ' Your counts are still here. Tap Save to try again.', true);
+  }).then(function () {
+    S.saving = false; renderFooter(); updateProgress();
+    if (Object.keys(toSend).length) flushSaves();
   });
 }
-window.addEventListener('beforeunload', function (e) { if (Object.keys(S.pending).length && !S.saving) { e.preventDefault(); e.returnValue = ''; } });
+function refreshCard(i, st) {
+  cardStatus[i.id] = st;
+  var c = $('c-' + i.id);
+  if (c && !c.contains(document.activeElement)) {
+    var tmp = document.createElement('div'); tmp.innerHTML = card(i);
+    c.replaceWith(tmp.firstChild);
+  } else setStatus(i.id, st);
+  setTimeout(function () { if (cardStatus[i.id] === 'ok') setStatus(i.id, null); }, 2500);
+}
+window.addEventListener('beforeunload', function (e) { if (Object.keys(S.pending).length || S.saving) { e.preventDefault(); e.returnValue = ''; } });
 
 /* ---------- History ---------- */
 function showHistory(i) {
